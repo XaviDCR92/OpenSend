@@ -54,6 +54,8 @@ int main(void)
         uint32_t i;
         void (*exeAddress)(void);
 
+        GfxSetGlobalLuminance(0);
+
         SerialInit();
 
         // Read PSX-EXE header (32 bytes will be enough).
@@ -117,8 +119,6 @@ int main(void)
 
         SerialSetState(SERIAL_STATE_READING_EXE_DATA);
 
-        SystemDisableVBlankInterrupt();
-
         while(GfxIsGPUBusy() == true);
 
         for(i = 0; i < ExeSize; i += EXE_DATA_PACKET_SIZE)
@@ -143,15 +143,13 @@ int main(void)
             SerialWrite(ACK_BYTE_STRING, sizeof(uint8_t)); // Write ACK
         }
 
-        SystemEnableVBlankInterrupt();
-
-        //SystemLoadFileToBuffer("cdrom:\\AIRPORT.EXE;1", 2048, (uint8_t*)0x80010000, (uint32_t) (0x801A0000 - 0x80010000) );
-
         SetVBlankHandler(&ISR_SystemDefaultVBlank);
 
         // Make a pretty animation before exeting OpenSend application.
 
         EndAnimation();
+
+        PSX_DeInit();
 
         // PSX-EXE has been successfully loaded into RAM. Run executable!
 

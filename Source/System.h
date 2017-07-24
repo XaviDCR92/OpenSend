@@ -52,9 +52,6 @@ bool SystemIsRandSeedSet(void);
 // Stops program flow during X cycles
 void SystemWaitCycles(uint32_t cycles);
 
-// To be called from GfxDrawScene after each cycle
-void SystemRunTimers(void);
-
 // 1 cycle-length flag with a frequency of 1 Hz
 bool System1SecondTick(void);
 
@@ -88,25 +85,11 @@ bool SystemContains_u8(uint8_t value, uint8_t* buffer, size_t sz);
 // Overload for uint16_t
 bool SystemContains_u16(uint16_t value, uint16_t* buffer, size_t sz);
 
-// Creates a timer instance wiht a determined value and associates it to a callback
-// Once time expires, callback is automatically called right after GfxDrawScene().
-// Time is expressed so that t = 100 ms e.g.: 2 seconds = 20.
-TYPE_TIMER* SystemCreateTimer(uint32_t t, bool rf, void (*timer_callback)(void) );
-
 // Reportedly, sets all timer data to zero.
 void SystemResetTimers(void);
 
 // To be called every cycle (i.e.: inside GfxDrawScene() ).
 void SystemUserTimersHandler(void);
-
-// Sets timer remaining time to initial value.
-void SystemTimerRestart(TYPE_TIMER* timer);
-
-// Flushes a timer pointed to by timer.
-void SystemTimerRemove(TYPE_TIMER* timer);
-
-// Compares two arrays of unsigned short type.
-bool SystemArrayCompare(unsigned short* arr1, unsigned short* arr2, size_t sz);
 
 // Looks for string "str" inside a string array pointed to by "array".
 // Returns index inside string array on success, -1 if not found.

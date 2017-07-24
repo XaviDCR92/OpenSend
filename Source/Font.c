@@ -104,21 +104,6 @@ void FontPrintText(TYPE_FONT * ptrFont, short x, short y, char* str, ...)
 	
 	va_list ap;
 	
-	if(ptrFont->flags & FONT_1HZ_FLASH)
-	{
-		if(Gfx1HzFlash() == false)
-		{
-			return;
-		}
-	}
-	else if(ptrFont->flags & FONT_2HZ_FLASH)
-	{
-		if(Gfx2HzFlash() == false)
-		{
-			return;
-		}
-	}
-	
 	va_start(ap, str);
 	
 	result = vsnprintf(	_internal_text,

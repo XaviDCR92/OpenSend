@@ -8,7 +8,7 @@
 #include "Global_Inc.h"
 #include "System.h"
 
-#include "Pad.h"
+
 
 /* *************************************
  * 	Defines
@@ -95,12 +95,6 @@ bool GfxTPageOffsetFromVRAMPosition(GsSprite * spr, short x, short y);
 void GfxSetSplitScreen(uint8_t playerIndex);
 
 void GfxDisableSplitScreen(void);
-
-// Switches between true and false every 1 exact second (used for flashing effects)
-bool Gfx1HzFlash(void);
-
-// Switches between true and false every 500 milliseconds (used for flashing effects)
-bool Gfx2HzFlash(void);
 
 void GfxDrawScene_NoSwap(void);
 

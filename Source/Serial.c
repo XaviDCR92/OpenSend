@@ -80,16 +80,28 @@ void ISR_Serial(void)
         SERIAL_STATE_TEXT_Y = Y_SCREEN_RESOLUTION >> 1,
     };
 
-    if((GfxIsGPUBusy() == true) || (serial_busy == true) )
+    SystemIncreaseGlobalTimer();
+
+    if( (GfxIsGPUBusy() == true) || (SystemIsBusy() == true) )
     {
         return;
     }
 
-    GsSortGPoly4(&SerialBg);
-
     FontSetFlags(&SmallFont, FONT_BLEND_EFFECT | FONT_H_CENTERED);
 
-    GfxSetGlobalLuminance(0);
+    if(SerialState == SERIAL_STATE_READING_EXE_DATA)
+    {
+        if(System1SecondTick() == false)
+        {
+            return;
+        }
+        else
+        {
+            FontSetFlags(&SmallFont, FONT_H_CENTERED);
+        }
+    }
+
+    GsSortGPoly4(&SerialBg);
 
     switch(SerialState)
     {
@@ -130,7 +142,7 @@ void ISR_Serial(void)
         break;
     }
 
-    FontSetFlags(&SmallFont, FONT_NOFLAGS);
+    FontSetFlags(&SmallFont, FONT_H_CENTERED);
 
     if(RAMDest_Address != 0)
     {
@@ -174,11 +186,9 @@ void SerialInit(void)
 {
     uint8_t receivedBytes;
 
-    SerialState = SERIAL_STATE_INIT;
-
-    dprintf("SerialInit...\n");
-
     SetVBlankHandler(&ISR_Serial);
+
+    SerialState = SERIAL_STATE_INIT;
 
     SIOStart(SERIAL_BAUDRATE);
 
@@ -195,7 +205,6 @@ void SerialInit(void)
     if(receivedBytes != 99)
     {
         dprintf("Did not receive input magic number!\n");
-        SetVBlankHandler(&ISR_SystemDefaultVBlank);
         return;
     }
 
@@ -217,11 +226,10 @@ bool SerialRead(uint8_t* ptrArray, size_t nBytes)
     totalBytes = nBytes;
 
     serial_busy = true;
-    SystemDisableVBlankInterrupt();
 
     if(nBytes == 0)
     {
-        dprintf("SerialRead: invalid size %d\n", nBytes);
+        SerialWrite("SerialRead: invalid size %d\n", strnlen("SerialRead: invalid size %d\n", 30));
         return false;
     }
 
@@ -237,19 +245,18 @@ bool SerialRead(uint8_t* ptrArray, size_t nBytes)
 
     serial_busy = false;
 
-    SystemEnableVBlankInterrupt();
-
     return true;
 }
 
 bool SerialWrite(void* ptrArray, size_t nBytes)
 {
     serial_busy = true;
+
     SystemDisableVBlankInterrupt();
 
     if(nBytes == 0)
     {
-        dprintf("SerialWrite: invalid size %d\n", nBytes);
+        SerialWrite("SerialRead: invalid size %d\n", strnlen("SerialRead: invalid size %d\n", 30));
         return false;
     }
 
@@ -263,9 +270,9 @@ bool SerialWrite(void* ptrArray, size_t nBytes)
 
     }while(--nBytes);
 
-    serial_busy = false;
-
     SystemEnableVBlankInterrupt();
+
+    serial_busy = false;
 
     return true;
 }

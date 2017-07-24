@@ -99,9 +99,6 @@ static uint8_t global_lum;
 // information for development purposes.
 static bool GfxDevMenuEnableFlag;
 
-static bool five_hundred_ms_show;
-static bool one_second_show;
-
 void GfxSwapBuffers(void)
 {
 	// Consistency check
@@ -181,17 +178,7 @@ void GfxSetPrimitiveList(void)
 }
 
 void GfxDrawScene_Fast(void)
-{
-	if(System1SecondTick() == true)
-	{
-		one_second_show = one_second_show? false:true;
-	}
-
-	if(System500msTick() == true)
-	{
-		five_hundred_ms_show = five_hundred_ms_show? false:true;
-	}
-	
+{	
 	GfxSwapBuffers();
 	FontCyclic();
 	GsDrawList();
@@ -227,8 +214,6 @@ void GfxSortSprite(GsSprite * spr)
 	unsigned char aux_tpage = spr->tpage;
 	short aux_w = spr->w;
 	short aux_x = spr->x;
-	bool has_1hz_flash = spr->attribute & GFX_1HZ_FLASH;
-	bool has_2hz_flash = spr->attribute & GFX_2HZ_FLASH;
 	
 	if(	(spr->w <= 0) || (spr->h <= 0) )
 	{
@@ -237,14 +222,6 @@ void GfxSortSprite(GsSprite * spr)
 	}
 	
 	if(GfxIsSpriteInsideScreenArea(spr) == false)
-	{
-		return;
-	}
-	else if(has_2hz_flash && Gfx2HzFlash() == false)
-	{
-		return;
-	}
-	else if(has_1hz_flash && Gfx1HzFlash() == false)
 	{
 		return;
 	}
@@ -278,12 +255,7 @@ void GfxSortSprite(GsSprite * spr)
 			spr->b -= NORMAL_LUMINANCE - global_lum;
 		}
 	}
-	
-	if(has_1hz_flash == true)
-	{
-		spr->attribute &= ~(GFX_1HZ_FLASH);
-	}
-	
+
 	if(spr->w > MAX_SIZE_FOR_GSSPRITE)
 	{
 		// GsSprites can't be bigger than 256x256, so since display
@@ -305,11 +277,6 @@ void GfxSortSprite(GsSprite * spr)
 	else
 	{
 		GsSortSprite(spr);
-	}
-	
-	if(has_1hz_flash == true)
-	{
-		spr->attribute |= GFX_1HZ_FLASH;
 	}
 	
 	spr->r = aux_r;
@@ -557,16 +524,6 @@ void GfxSaveDisplayData(GsSprite *spr)
 	spr->b = NORMAL_LUMINANCE;
 
 	while(GfxIsGPUBusy() == true);
-}
-
-bool Gfx1HzFlash(void)
-{
-	return one_second_show;
-}
-
-bool Gfx2HzFlash(void)
-{
-	return five_hundred_ms_show;
 }
 
 bool GfxTPageOffsetFromVRAMPosition(GsSprite * spr, short x, short y)

@@ -11,7 +11,7 @@ PROJECT_DIR = ~/OpenSend
 INIT_ADDR=0x801A0000
 
 ELF2EXE = elf2exe
-ELF2EXE_FLAGS = -mark="A homebrew game created with PSXSDK" -init_addr=$(INIT_ADDR)
+ELF2EXE_FLAGS = -mark="Open-source PSX-EXE loader created with PSXSDK" -init_addr=$(INIT_ADDR)
 LICENSE_FILE = /usr/local/psxsdk/share/licenses/infoeur.dat
 
 PSXSDK_DIR = /usr/local/psxsdk/bin
@@ -36,7 +36,7 @@ rebuild: remove build
 
 build: clean objects $(PROJECT).elf $(PROJECT).exe
 	
-objects: 	$(addprefix $(OBJ_DIR)/,main.o System.o Gfx.o Pad.o 	\
+objects: 	$(addprefix $(OBJ_DIR)/,main.o System.o Gfx.o \
 			LoadMenu.o EndAnimation.o			\
 			Font.o Serial.o)
 			
