@@ -1,38 +1,57 @@
-/* *************************************
- *  Includes
- * *************************************/
-
 #include "Serial.h"
 #include "Interrupts.h"
 #include <psxsio.h>
 #include <stdarg.h>
 #include <stdio.h>
+#include <psxbios.h>
+#include <psx.h>
+#include <stddef.h>
 
-/* *************************************
- *  Defines
- * *************************************/
+static volatile size_t isr_calls;
 
-#define SERIAL_BAUDRATE 115200
-#define SERIAL_TX_RX_TIMEOUT 20000
-#define SERIAL_RX_FIFO_EMPTY 0
-#define SERIAL_TX_NOT_READY 0
-#define SERIAL_PRINTF_INTERNAL_BUFFER_SIZE 256
-
-/* **************************************
- *  Structs and enums                   *
- * *************************************/
-
-/* *************************************
- *  Local Variables
- * *************************************/
-
-/* *************************************
- *  Local Prototypes
- * *************************************/
+void sio_handler_callback(void)
+{
+    printf("%s\n", __func__);
+    isr_calls++;
+}
 
 void SerialInit(void)
 {
-    SIOStart(115200);
+    int *sio_handler(void);
+
+    enum
+    {
+        SIO_CLASS = 0xF000000B
+    };
+
+    EnterCriticalSection();
+
+    IMASK |= 1 << 8;
+
+    const int sio_handle = OpenEvent(SIO_CLASS, 0x1000, 0x1000, sio_handler);
+
+    if (sio_handle != 0xFFFFFFFF)
+    {
+        enum
+        {
+            BAUD_RATE = 115200
+        };
+
+        EnableEvent(sio_handle);
+        SIOStart(BAUD_RATE);
+        redirect_stdio_to_sio();
+        printf("sio_handle = 0x%08X", sio_handle);
+    }
+
+    ExitCriticalSection();
+
+    SIOSendByte('y');
+
+    printf("%u\n", isr_calls);
+
+    while (!(IPENDING & (1 << 8)));
+
+    printf("SIO ISR triggered\n");
 }
 
 void SerialRead(uint8_t *ptrArray, size_t nBytes)
@@ -43,7 +62,8 @@ void SerialRead(uint8_t *ptrArray, size_t nBytes)
 
         do
         {
-            while ( (SIOCheckInBuffer() == SERIAL_RX_FIFO_EMPTY)); // Wait for RX FIFO not empty
+            /* Wait for RX FIFO not empty. */
+            while (!SIOCheckInBuffer());
 
             *(ptrArray++) = SIOReadByte();
         } while (--nBytes);
@@ -59,7 +79,8 @@ void SerialWrite(const void* ptrArray, size_t nBytes)
         InterruptsDisableInt(INT_SOURCE_VBLANK);
         do
         {
-            while ( (SIOCheckOutBuffer() == SERIAL_TX_NOT_READY)); // Wait for TX FIFO empty.
+            /* Wait for TX FIFO empty. */
+            while (!SIOCheckOutBuffer());
 
             SIOSendByte(*(uint8_t*)ptrArray++);
 

@@ -5,8 +5,11 @@
  * 	Includes
  * *************************************/
 
+#include "Font.h"
+#include <psxgpu.h>
 #include <stdarg.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 enum
 {
@@ -14,7 +17,7 @@ enum
     FONT_DEFAULT_INIT_CHAR = '!'
 };
 
-enum t_fontflags
+enum font_flags
 {
 	FONT_NOFLAGS,
 	FONT_CENTERED		= 0x01,

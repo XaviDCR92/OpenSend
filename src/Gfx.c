@@ -1,17 +1,3 @@
-/*******************************************************************//**
-*
-* \file     Gfx.c
-*
-* \author   Xavier Del Campo
-*
-* \brief    Implementation of Gfx module.
-*
-************************************************************************/
-
-/* *************************************
- * Includes
- * *************************************/
-
 #include "Gfx.h"
 #include "IO.h"
 #include <psx.h>
@@ -21,22 +7,6 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdint.h>
-
-/* *************************************
- * Defines
- * *************************************/
-
-/* *****************************************************************************
- * Types definition
- * ****************************************************************************/
-
-/* *****************************************************************************
- * Global variables definition
- * ****************************************************************************/
-
-/* *****************************************************************************
- * Local variables definition
- * ****************************************************************************/
 
 /* The drawing environment points to VRAM
  * coordinates where primitive data is
@@ -51,20 +21,12 @@ static GsDispEnv sDispEnv;
 /* This variable is set to true on VSYNC event. */
 static volatile bool bSyncFlag;
 
-/* *****************************************************************************
- * Local prototypes declaration
- * ****************************************************************************/
-
 static void GfxInitDrawEnv(void);
 static void GfxInitDispEnv(void);
 static void GfxSwapBuffers(void);
 static void GfxSortBigSprite(GsSprite *const psSpr);
 static void GfxSetPrimList(void);
 static void ISR_VBlank(void);
-
-/* *****************************************************************************
- * Functions definition
- * ****************************************************************************/
 
 /***************************************************************************//**
 *
@@ -498,10 +460,10 @@ void GfxSaveDisplayData(GsSprite *const spr)
         GFX_SECOND_DISPLAY_U = GFX_SECOND_DISPLAY_X % GFX_TPAGE_WIDTH
     };
 
-	while (GfxIsGPUBusy());
+	while (GfxIsBusy());
 
-	MoveImage(	DispEnv.x,
-				DispEnv.y,
+	MoveImage(	sDispEnv.x,
+				sDispEnv.y,
 				GFX_SECOND_DISPLAY_X,
 				GFX_SECOND_DISPLAY_Y,
 				X_SCREEN_RESOLUTION,
@@ -519,5 +481,5 @@ void GfxSaveDisplayData(GsSprite *const spr)
 	spr->g = NORMAL_LUMINANCE;
 	spr->b = NORMAL_LUMINANCE;
 
-	while (GfxIsGPUBusy());
+	while (GfxIsBusy());
 }

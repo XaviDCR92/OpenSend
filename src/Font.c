@@ -3,6 +3,12 @@
  * *************************************/
 
 #include "Font.h"
+#include "Gfx.h"
+#include <psxgpu.h>
+#include <stdarg.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdio.h>
 
 /* *************************************
  * 	Defines
@@ -21,7 +27,7 @@
 static char _internal_text[FONT_INTERNAL_TEXT_BUFFER_MAX_SIZE];
 static unsigned char _blend_effect_lum;
 
-bool FontLoadImage(char *path, struct font *font)
+bool FontLoadImage(const char *const path, struct font *const font)
 {
 	if (GfxSpriteFromFile(path, &font->spr) == false)
 	{
@@ -54,8 +60,6 @@ bool FontLoadImage(char *path, struct font *font)
 	font->flags = FONT_NOFLAGS;
 
 	font->init_ch = FONT_DEFAULT_INIT_CHAR;
-
-	dprintf("Sprite CX = %d, sprite CY = %d\n",font->spr.cx, font->spr.cy);
 
 	return true;
 }
@@ -168,14 +172,6 @@ void FontPrintText(struct font *font, short x, short y, char* str, ...)
 					font->spr.g = NORMAL_LUMINANCE;
 					font->spr.b = NORMAL_LUMINANCE;
 				}
-				/*dprintf("char_w = %d, char_h = %d, char_per_row = %d, init_ch: %c\n",
-						font->char_w,
-						font->char_h,
-						font->char_per_row,
-						font->init_ch);
-				dprintf("Char: %c, spr.u = %d, spr.v = %d\n",str[i],font->spr.u, font->spr.v);
-				dprintf("Sprite CX = %d, sprite CY = %d\n",font->spr.cx, font->spr.cy);*/
-				/* dprintf("Sprite rgb={%d,%d,%d}\n",font->spr.r, font->spr.g, font->spr.b); */
 
 				GfxSortSprite(&font->spr);
 				x += font->char_spacing;

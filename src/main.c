@@ -1,12 +1,16 @@
+#include "System.h"
+#include <stdio.h>
+
 #define PSX_EXE_HEADER_SIZE 2048
 #define EXE_DATA_PACKET_SIZE 8
-
-void _start(void);
 
 int main(void)
 {
     SystemInit();
 
+    for (;;);
+
+#if 0
     {
         uint32_t initPC_Address;
         uint32_t RAMDest_Address;
@@ -117,6 +121,6 @@ int main(void)
 
         exeAddress();
     }
-
+#endif
     return 0;
 }

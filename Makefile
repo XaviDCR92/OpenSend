@@ -1,12 +1,13 @@
 PSXSDK_DIR = /usr/local/psxsdk
 
+AS = mipsel-unknown-elf-as
 CC = mipsel-unknown-elf-gcc
-DEFINE = -DPSXSDK_DEBUG
+DEFINE = -DVIDEO_MODE=VMODE_PAL -D__PSXSDK__ -fno-strict-overflow -fsigned-char -msoft-float -mno-gpopt -fno-builtin -g
 LIBS = -lfixmath
 INCLUDE = include $(PSXSDK_DIR)/include
 CC_FLAGS = -Wall -Werror -ffunction-sections -fdata-sections -c -Os -Wfatal-errors -g $(addprefix -I, $(INCLUDE))
 LD = mipsel-unknown-elf-gcc
-LD_FLAGS = $(LIBS) -Wl,--gc-sections
+LD_FLAGS = $(LIBS) -Wl,--gc-sections -L$(PSXSDK_DIR)/lib -I/usr/local/psxsdk/include -T /usr/local/psxsdk/mipsel-unknown-elf/lib/ldscripts/playstation.x
 
 PROJECT = opensend
 
@@ -30,9 +31,11 @@ BIN_TARGET_PATH = bin
 GNU_SIZE = mipsel-unknown-elf-size
 
 OBJECTS = $(addprefix $(OBJ_DIR)/,	\
-			EndAnimation.o Font.o Gfx.o LoadMenu.o main.o Serial.o System.o \
-			Interrupts.o IO.o \
+			Font.o Gfx.o Serial.o System.o \
+			Interrupts.o IO.o main.o sio.o \
 			)
+
+CDROM_ROOT = cdimg
 
 $(BIN_TARGET_PATH)/$(PROJECT).bin: $(EXE_PATH)/$(PROJECT).iso
 	mkdir -p $(BIN_TARGET_PATH)
@@ -47,19 +50,15 @@ rebuild:
 
 -include $(DEPS)
 
-#music_objects:	$(addprefix ../Music/, TRACK01.bin TRACK02.bin TRACK03.bin)
-
 clean:
-	rm -f $(EXE_DIR)/*.EXE
+	rm -f $(EXE_DIR)/*.exe
 	rm -f $(EXE_DIR)/*.iso
 	rm -f $(EXE_DIR)/*.elf
 	rm -f $(OBJ_DIR)/*.o
 	rm -f $(OBJ_DIR)/*.d
-	rm -f $(OBJ_SOUNDS_DIR)/*.VAG
-	rm -f $(OBJ_LEVELS_DIR)/*.LVL
-	rm -f $(OBJ_LEVELS_DIR)/*.PLT
-	rm -f $(OBJ_SPRITES_PATH)/*.TIM
-	rm -f $(OBJ_FONTS_PATH)/*.TIM
+	rm -f $(OBJ_SOUNDS_DIR)/*.vag
+	rm -f $(OBJ_SPRITES_PATH)/*.tim
+	rm -f $(OBJ_FONTS_PATH)/*.tim
 
 $(OBJ_DIR)/%.d: $(SRC_DIR)/%.cpp
 	@mkdir -p $(OBJ_DIR)
@@ -84,13 +83,13 @@ $(OBJ_DIR)/%.o: $(SRC_DIR)/%.s
 
 $(EXE_PATH)/$(PROJECT).elf: $(OBJECTS)
 	@mkdir -p $(EXE_PATH)
-	$(LD) $^ -o $@ $(LIBS) -Wl,--gc-sections
+	$(LD) $^ -o $@ $(LD_FLAGS)
 
-$(EXE_PATH)/$(PROJECT).iso: $(EXE_PATH)/$(PROJECT).EXE $(SOUND_OBJECTS) $(LEVEL_OBJECTS) $(SPRITE_OBJECTS) $(APPS_OBJECTS)
+$(EXE_PATH)/$(PROJECT).iso: $(EXE_PATH)/$(PROJECT).exe $(SOUND_OBJECTS) $(LEVEL_OBJECTS) $(SPRITE_OBJECTS) $(APPS_OBJECTS)
 	@mkdir -p $(EXE_PATH)
 	mkisofs -o $@ -V $(PROJECT) -sysid PLAYSTATION $(CDROM_ROOT)
 
-$(EXE_PATH)/$(PROJECT).EXE: $(EXE_PATH)/$(PROJECT).elf
+$(EXE_PATH)/$(PROJECT).exe: $(EXE_PATH)/$(PROJECT).elf
 	@mkdir -p $(EXE_PATH)
 	$(ELF2EXE) $< $@ $(ELF2EXE_FLAGS)
 	@mkdir -p $(CDROM_ROOT)
@@ -101,7 +100,7 @@ run: $(BIN_TARGET_PATH)/$(PROJECT).bin
 	@mkdir -p $(BIN_TARGET_PATH)
 	$(EMULATOR) -cdfile $(BIN_TARGET_PATH)/$(PROJECT).bin $(EMULATOR_FLAGS)
 
-$(OBJ_SPRITES_PATH)/%.TIM: $(SRC_SPRITES_PATH)/%.bmp $(SRC_SPRITES_PATH)/%.flags
+$(OBJ_SPRITES_PATH)/%.tim: $(SRC_SPRITES_PATH)/%.bmp $(SRC_SPRITES_PATH)/%.flags
 	@mkdir -p $(OBJ_SPRITES_PATH)
 	$(BMP2TIM) $< $@ `cat $(word 2,$^)`
 
@@ -109,11 +108,11 @@ $(OBJ_APPS_PATH)/%.EOL: $(SRC_APPS_PATH)/%.EOL
 	@mkdir -p $(OBJ_APPS_PATH)
 	cp $^ $@
 
-$(OBJ_FONTS_PATH)/%.TIM: $(SRC_SPRITES_PATH)/%.bmp $(SRC_SPRITES_PATH)/%.flags
+$(OBJ_FONTS_PATH)/%.tim: $(SRC_SPRITES_PATH)/%.bmp $(SRC_SPRITES_PATH)/%.flags
 	@mkdir -p $(OBJ_FONTS_PATH)
 	$(BMP2TIM) $< $@ `cat $(word 2,$^)`
 
-$(OBJ_SOUNDS_DIR)/%.VAG: $(SOURCE_SOUNDS_FOLDER)/%.wav $(SOURCE_SOUNDS_FOLDER)/%.flags
+$(OBJ_SOUNDS_DIR)/%.vag: $(SOURCE_SOUNDS_FOLDER)/%.wav $(SOURCE_SOUNDS_FOLDER)/%.flags
 	@mkdir -p $(OBJ_SOUNDS_DIR)
 	wav2vag $< $@ `cat $(word 2,$^)`
 

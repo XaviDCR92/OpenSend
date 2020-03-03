@@ -115,7 +115,7 @@ static const uint8_t *IOLoadFileFromCd(char* const buffer, size_t* const fileSiz
                 {
                     /* Buffer cannot hold such amount of data.
                      * Fall through. */
-                    printf("%s does not fit into internal buffer (%ld / %ld bytes)\n",
+                    printf("%s does not fit into internal buffer (%u / %u bytes)\n",
                             buffer, *fileSize, FILE_BUFFER_SIZE);
                 }
 
