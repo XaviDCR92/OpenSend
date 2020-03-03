@@ -1,552 +1,523 @@
+/*******************************************************************//**
+*
+* \file     Gfx.c
+*
+* \author   Xavier Del Campo
+*
+* \brief    Implementation of Gfx module.
+*
+************************************************************************/
+
 /* *************************************
- * 	Includes
+ * Includes
  * *************************************/
 
 #include "Gfx.h"
+#include "IO.h"
+#include <psx.h>
+#include <psxgpu.h>
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdint.h>
 
 /* *************************************
- * 	Defines
+ * Defines
  * *************************************/
 
-#define PRIMITIVE_LIST_SIZE 0x1000
-#define DOUBLE_BUFFERING_SWAP_Y	256
-#define UPLOAD_IMAGE_FLAG 1
-#define MAX_LUMINANCE 0xFF
-#define ROTATE_BIT_SHIFT 12
-#define GPUSTAT (*(unsigned int*)0x1F801814)
-#define D2_CHCR (*(unsigned int*)0x1F8010A8)
+/* *****************************************************************************
+ * Types definition
+ * ****************************************************************************/
 
-/* *************************************
- * 	Structs and enums
- * *************************************/
+/* *****************************************************************************
+ * Global variables definition
+ * ****************************************************************************/
 
-enum
+/* *****************************************************************************
+ * Local variables definition
+ * ****************************************************************************/
+
+/* The drawing environment points to VRAM
+ * coordinates where primitive data is
+ * being drawn onto. */
+static GsDrawEnv sDrawEnv;
+
+/* The display environment points to VRAM
+ * coordinates where primitive data is
+ * being shown on screen. */
+static GsDispEnv sDispEnv;
+
+/* This variable is set to true on VSYNC event. */
+static volatile bool bSyncFlag;
+
+/* *****************************************************************************
+ * Local prototypes declaration
+ * ****************************************************************************/
+
+static void GfxInitDrawEnv(void);
+static void GfxInitDispEnv(void);
+static void GfxSwapBuffers(void);
+static void GfxSortBigSprite(GsSprite *const psSpr);
+static void GfxSetPrimList(void);
+static void ISR_VBlank(void);
+
+/* *****************************************************************************
+ * Functions definition
+ * ****************************************************************************/
+
+/***************************************************************************//**
+*
+* \brief    Initialization of Gfx module.
+*
+* \remarks  This is where PSX GPU and its interface get initialized.
+*
+*******************************************************************************/
+void GfxInit(void)
 {
-	BUTTON_SIZE = 16,
-	
-	BUTTON_CROSS_U = 48,
-	BUTTON_CROSS_V = 0,
-	
-	BUTTON_SQUARE_U = 0,
-	BUTTON_SQUARE_V = 0,
-	
-	BUTTON_TRIANGLE_U = 32,
-	BUTTON_TRIANGLE_V = 0,
-	
-	BUTTON_CIRCLE_U = 16,
-	BUTTON_CIRCLE_V = 0,
+    /* Graphics synthetiser (GPU) initialization. */
+    GsInit();
 
-	BUTTON_DIRECTION_U = 64,
-	BUTTON_DIRECTION_V = 0,
-	
-	BUTTON_LR_U = 80,
-	BUTTON_LR_V = 0,
-	BUTTON_LR_SIZE = 24,
+    /* Clear VRAM. */
+    GsClearMem();
 
-	LETTER_SIZE = 8,
+#if (VIDEO_MODE == VMODE_PAL) || (VIDEO_MODE == VMODE_NSTC)
 
-	LETTER_L1_U = 104,
-	LETTER_L1_V = 0,
+    /* Set Video Resolution. VIDEO_MODE can be either VMODE_PAL or VMODE_NTSC */
+    GsSetVideoMode(X_SCREEN_RESOLUTION, Y_SCREEN_RESOLUTION, VIDEO_MODE);
 
-	LETTER_L2_U = 112,
-	LETTER_L2_V = 0,
+#else /* (VIDEO_MODE == VMODE_PAL) || (VIDEO_MODE == VMODE_NSTC) */
 
-	LETTER_R1_U = 104,
-	LETTER_R1_V = 8,
+#error  "Undefined VIDEO_MODE"
 
-	LETTER_R2_U = 112,
-	LETTER_R2_V = 8,
+#endif /* (VIDEO_MODE == VMODE_PAL) || (VIDEO_MODE == VMODE_NSTC) */
 
-	LETTER_OFFSET_INSIDE_BUTTON_LR_X = 8,
-	LETTER_OFFSET_INSIDE_BUTTON_LR_Y = 6
-	
-};
+    /* Set Drawing Environment. */
+    GfxInitDrawEnv();
 
-enum
-{
-	GFX_SECOND_DISPLAY_X = 384,
-	GFX_SECOND_DISPLAY_Y = 256,
-	GFX_SECOND_DISPLAY_TPAGE = 22
-};
+    /* Set Display Environment. */
+    GfxInitDispEnv();
 
-/* *************************************
- * 	Global Variables
- * *************************************/
+    /* Set primitive list. */
+    GfxSetPrimList();
 
-GsSprite PSXButtons;
-
-/* *************************************
- * 	Local Prototypes
- * *************************************/
-
-
-
-/* *************************************
- * 	Local Variables
- * *************************************/
-
-// Drawing environment
-static GsDrawEnv DrawEnv;
-// Display environment
-static GsDispEnv DispEnv;
-// Primitive list (it contains all the graphical data for the GPU)
-static unsigned int prim_list[PRIMITIVE_LIST_SIZE];
-// Tells other modules whether data is being loaded to GPU
-static volatile bool gfx_busy;
-// Dictates (R,G,B) brigthness to all sprites silently
-static uint8_t global_lum;
-// When true, it draws a rectangle on top of all primitives with
-// information for development purposes.
-static bool GfxDevMenuEnableFlag;
-
-void GfxSwapBuffers(void)
-{
-	// Consistency check
-#if PSXSDK_DEBUG
-
-	if(GsListPos() >= PRIMITIVE_LIST_SIZE)
-	{
-		dprintf("Linked list iterator overflow!\n");
-		while(1);
-	}
-	
-	if( (DrawEnv.h != Y_SCREEN_RESOLUTION)
-					||
-		( (DrawEnv.w != X_SCREEN_RESOLUTION)
-						&&
-		  (DrawEnv.w != X_SCREEN_RESOLUTION >> 1) )
-					||
-		( (DispEnv.y != DOUBLE_BUFFERING_SWAP_Y)
-						&&
-		  (DispEnv.y != 0) )		)
-	{
-		dprintf("What the hell is happening?\n");
-		DEBUG_PRINT_VAR(DispEnv.x);
-		DEBUG_PRINT_VAR(DispEnv.y);
-		DEBUG_PRINT_VAR(DrawEnv.x);
-		DEBUG_PRINT_VAR(DrawEnv.y);
-
-		while(1);
-	}
-#endif // PSXSDK_DEBUG
-
-	if(DrawEnv.h == Y_SCREEN_RESOLUTION)
-	{
-		if(DispEnv.y == 0)
-		{
-			DispEnv.y = DOUBLE_BUFFERING_SWAP_Y;
-			DrawEnv.y = 0;
-		}
-		else if(DispEnv.y == DOUBLE_BUFFERING_SWAP_Y)
-		{
-			DispEnv.y = 0;
-			DrawEnv.y = DOUBLE_BUFFERING_SWAP_Y;
-		}
-			
-		GsSetDispEnv(&DispEnv);
-		GsSetDrawEnv(&DrawEnv);
-	}
+    /* Set Vsync interrupt handler for screen refresh. */
+    SetVBlankHandler(&ISR_VBlank);
 }
 
-void GfxDevMenuEnable(void)
+/***************************************************************************//**
+*
+* \brief    Loads data from file indicated by strFilePath, uploads
+*           it into VRAM and sets up a new GsSprite instance.
+*
+* \param    strFilePath
+*               Absolute file path e.g.:
+*               "cdrom:\\DATA\\SPRITES\\TILESET1.TIM;1".
+*
+* \param    pSpr
+*               Pointer to sprite to be filled with image data.
+*
+* \return   Returns true when tasks could be made successfully,
+*           false otherwise.
+*
+* \see      IOLoadFile() for file I/O handling implementation.
+*
+*******************************************************************************/
+bool GfxSpriteFromFile(const char* const strFilePath, GsSprite *const pSpr)
 {
-    GfxDevMenuEnableFlag = true;
+    /* File size in bytes. Modified by IOLoadFile(). */
+    size_t eSize;
+
+    /* Get buffer address where file data is contained. */
+    const uint8_t *const buffer = IOLoadFile(strFilePath, &eSize);
+
+    if (buffer && (eSize != IO_INVALID_FILE_SIZE))
+    {
+        /* File was loaded successfully into buffer.
+         * Now read buffer data and upload it to VRAM. */
+
+        /* Declare a GsImage instance, needed by GsImageFromTim(). */
+        GsImage sGsi;
+
+        while (GsIsDrawing());
+
+        if (GsImageFromTim(&sGsi, buffer) == 1 /* Success code. */)
+        {
+            enum
+            {
+                UPLOAD_IMAGE_FLAG = 1
+            };
+
+            /* sGsi is now filled with data. Create
+             * a GsSprite instance from it. */
+
+            /* Call PSXSDK libs to upload image data to VRAM. "const" flag must be removed. */
+            if (GsSpriteFromImage(pSpr, &sGsi, UPLOAD_IMAGE_FLAG) == 1 /* Success code. */)
+            {
+                /* Return success code. */
+                return true;
+            }
+            else
+            {
+                /* Something went wrong when obtaining data
+                 * from GsImage instance. Fall through. */
+            }
+        }
+        else
+        {
+            /* Something went wrong when obtaining *.TIM data.
+             * Fall through. */
+        }
+    }
+    else
+    {
+        /* Something went wrong when loading the file. Fall through. */
+    }
+
+    /* Return failure code if reached here. */
+    return false;
 }
 
-void GfxInitDrawEnv(void)
+void GfxClear(void)
 {
-	DrawEnv.x = 0;
-	DrawEnv.y = 0;
-	DrawEnv.draw_on_display = false;
-	DrawEnv.w = X_SCREEN_RESOLUTION;
-	DrawEnv.h = Y_SCREEN_RESOLUTION;
-	
-	GsSetDrawEnv(&DrawEnv);
+    GsSortCls(0, 0, 0);
 }
 
-void GfxInitDispEnv(void)
-{
-	DispEnv.x = 0;
-	DispEnv.y = 0;
-	
-	GsSetDispEnv(&DispEnv);
-}
-
-void GfxSetPrimitiveList(void)
-{
-	GsSetList(prim_list);
-}
-
-void GfxDrawScene_Fast(void)
-{	
-	GfxSwapBuffers();
-	FontCyclic();
-	GsDrawList();
-}
-
-bool GfxReadyForDMATransfer(void)
-{
-	return ( (GPUSTAT & 1<<28) && !(D2_CHCR & 1<<24) );
-}
-
+/***************************************************************************//**
+*
+* \brief    Draws current primitive list into screen and performs double
+*           buffering.
+*
+* \remarks  Blocking function. This function waits for GPU to be free and GPU
+*           VSYNC IRQ flag to be set.
+*
+*******************************************************************************/
 void GfxDrawScene(void)
 {
-	while(	(SystemRefreshNeeded() == false) 
-				||
-			(GfxIsGPUBusy() == true)		);
-			
-	GfxDrawScene_Fast();
-	
-	SystemCyclicHandler();
+    /* Hold program execution until VSYNC flag is set
+     * and GPU is ready to work. */
+    while (!bSyncFlag || GsIsDrawing());
+
+    /* Reset VSYNC event flag. */
+    bSyncFlag = false;
+
+    /* Swap drawing and display enviroments Y position. */
+    GfxSwapBuffers();
+
+    /* Draw all primitives into screen. */
+    GsDrawList();
 }
 
-void GfxDrawScene_Slow(void)
+bool GfxIsBusy(void)
 {
-	GfxDrawScene();
-	while(GfxIsGPUBusy() == true);
+    return GsIsDrawing();
 }
 
-void GfxSortSprite(GsSprite * spr)
+/***************************************************************************//**
+*
+* \brief    Indicates whether a rectangle defined by x, y, w and h whether
+*           inside current drawing area.
+*
+* \param    x
+*               Rectangle initial X offset.
+*
+* \param    y
+*               Rectangle initial X offset.
+*
+* \param    w
+*               Rectangle width.
+*
+* \param    h
+*               Rectangle height.
+*
+* \return   Returns true if rectangle defined by input parameters
+*           is inside screen area, false otherwise.
+*
+*******************************************************************************/
+bool GfxIsInsideScreenArea(const short x, const short y, const short w, const short h)
 {
-	uint8_t aux_r = spr->r;
-	uint8_t aux_g = spr->g;
-	uint8_t aux_b = spr->b;
-	unsigned char aux_tpage = spr->tpage;
-	short aux_w = spr->w;
-	short aux_x = spr->x;
-	
-	if(	(spr->w <= 0) || (spr->h <= 0) )
-	{
-		// Invalid width or heigth
-		return;
-	}
-	
-	if(GfxIsSpriteInsideScreenArea(spr) == false)
-	{
-		return;
-	}
-	
-	if(global_lum != NORMAL_LUMINANCE)
-	{
-		if(spr->r < NORMAL_LUMINANCE - global_lum)
-		{
-			spr->r = 0;
-		}
-		else
-		{
-			spr->r -= NORMAL_LUMINANCE - global_lum;
-		}
-		
-		if(spr->g < NORMAL_LUMINANCE - global_lum)
-		{
-			spr->g = 0;
-		}
-		else
-		{
-			spr->g -= NORMAL_LUMINANCE - global_lum;
-		}
-		
-		if(spr->b < NORMAL_LUMINANCE - global_lum)
-		{
-			spr->b = 0;
-		}
-		else
-		{
-			spr->b -= NORMAL_LUMINANCE - global_lum;
-		}
-	}
+    if (((x + w) >= 0)
+            &&
+        (x < sDrawEnv.w)
+            &&
+        ((y + h) >= 0)
+            &&
+        (y < sDrawEnv.h))
+    {
+        /* Rectangle is inside drawing environment area. */
+        return true;
+    }
+    else
+    {
+        /* Rectangle is outside drawing environment area.
+         * Fall through. */
+    }
 
-	if(spr->w > MAX_SIZE_FOR_GSSPRITE)
-	{
-		// GsSprites can't be bigger than 256x256, so since display
-		// resolution is 384x240, it must be split into two primitives.
-		
-		spr->w = MAX_SIZE_FOR_GSSPRITE;
-		GsSortSprite(spr);
-
-		spr->x += MAX_SIZE_FOR_GSSPRITE;
-		spr->w = X_SCREEN_RESOLUTION - MAX_SIZE_FOR_GSSPRITE;
-		spr->tpage += MAX_SIZE_FOR_GSSPRITE / GFX_TPAGE_WIDTH;
-		GsSortSprite(spr);
-		
-		// Restore original values after sorting
-		spr->w = aux_w;
-		spr->tpage = aux_tpage;
-		spr->x = aux_x;
-	}
-	else
-	{
-		GsSortSprite(spr);
-	}
-	
-	spr->r = aux_r;
-	spr->g = aux_g;
-	spr->b = aux_b;
+    /* Return failure code if reached here. */
+    return false;
 }
 
-uint8_t GfxGetGlobalLuminance(void)
+/***************************************************************************//**
+*
+* \brief    Indicates whether a tSprite instance is inside active
+*           drawing environment area.
+*
+* \param    psSpr
+*               Pointer to tSprite structure.
+*
+*******************************************************************************/
+bool GfxIsSpriteInsideScreenArea(const GsSprite *const psSpr)
 {
-	return global_lum;
+    /* Define X/Y and width/height parameters. */
+    const short x = psSpr->x;
+    const short y = psSpr->y;
+    const short w = psSpr->w;
+    const short h = psSpr->h;
+
+    /* Return results. */
+    return GfxIsInsideScreenArea(x, y, w, h);
 }
 
-void GfxSetGlobalLuminance(uint8_t value)
+/***************************************************************************//**
+*
+* \brief    Extracting information from tSprite instance, this function adds a
+*           low-level GsSprite structure into internal primitive list if inside
+*           drawing environment area.
+*
+* \param    psSpr
+*               Index of low-level sprite structure inside the internal array.
+*
+* \remarks  Sprites bigger than 256x256 px are also supported. Internally,
+*           GfxSortBigSprite() draws two primitive, so up to 512x256 px
+*           primitives are supported.
+*
+* \see      GfxSortBigSprite() to see how big sprites are handled.
+*
+*******************************************************************************/
+void GfxSortSprite(GsSprite *const psSpr)
 {
-	global_lum = value;
+    if (GfxIsSpriteInsideScreenArea(psSpr))
+    {
+        /* Small sprites can be directly drawn using PSXSDK function.
+         * On the other hand, big sprites need some more processing. */
+        psSpr->w > MAX_SIZE_FOR_GSSPRITE ? GfxSortBigSprite(psSpr) : GsSortSprite(psSpr);
+    }
+    else
+    {
+        /* Sprite is outside drawing environment area. Exit. */
+    }
 }
 
-void GfxIncreaseGlobalLuminance(int8_t step)
-{	
-	if( (	(global_lum + step) < MAX_LUMINANCE )
-			&&
-		(	(global_lum + step) > 0	)			)
-	{
-		global_lum += step;
-	}
-	else
-	{
-		global_lum = MAX_LUMINANCE;
-	}
-}
-
-int GfxRotateFromDegrees(int deg)
+int GfxToDegrees(const int rotate)
 {
-	return deg << ROTATE_BIT_SHIFT;
+    return rotate >> 12;
 }
 
-bool GfxIsGPUBusy(void)
+int GfxFromDegrees(const int degrees)
 {
-	return (GsIsDrawing() || gfx_busy || (GfxReadyForDMATransfer() == false) );
+    return degrees << 12;
 }
 
-bool GfxSpriteFromFile(char* fname, GsSprite * spr)
+void GfxDrawRectangle(GsRectangle* const rect)
 {
-	GsImage gsi;
-	
-	if(SystemLoadFile(fname) == false)
-	{
-		return false;
-	}
-	
-	while(GfxIsGPUBusy() == true);
-	
-	gfx_busy = true;
-		
-	GsImageFromTim(&gsi,SystemGetBufferAddress() );
-	
-	GsSpriteFromImage(spr,&gsi,UPLOAD_IMAGE_FLAG);
-	gfx_busy = false;
-
-    DEBUG_PRINT_VAR(spr->tpage);
-    DEBUG_PRINT_VAR(spr->u);
-    DEBUG_PRINT_VAR(spr->v);
-    DEBUG_PRINT_VAR(spr->w);
-    DEBUG_PRINT_VAR(spr->h);
-	
-	return true;
+    GsSortRectangle(rect);
 }
 
-bool GfxCLUTFromFile(char* fname)
+/***************************************************************************//**
+*
+* \brief    Processes big sprites (e.g.: more than 256 px wide) by drawing two
+*           separate primitives.
+*
+* \param    psSpr
+*               Pointer to low-level GsSprite structure (given by
+*               GfxSortSprite()).
+*
+*******************************************************************************/
+static void GfxSortBigSprite(GsSprite *const psSpr)
 {
-	GsImage gsi;
+    /* On the other hand, GsSprite instances bigger than
+     * 256x256 px must be split into two primitives, so
+     * GsSortSprite shall be called twice. */
 
-	if(SystemLoadFile(fname) == false)
-	{
-		return false;
-	}
-	
-	while(GfxIsGPUBusy() == true);
-	
-	gfx_busy = true;
-		
-	GsImageFromTim(&gsi,SystemGetBufferAddress() );
-	
-	GsUploadCLUT(&gsi);
-	
-	gfx_busy = false;
-	
-	return true;
+    /* Store original TPage, width and X data. */
+    const unsigned char aux_tpage = psSpr->tpage;
+    const short aux_w = psSpr->w;
+    const short aux_x = psSpr->x;
+
+    /* First primitive will be 256x256 px. */
+    psSpr->w = MAX_SIZE_FOR_GSSPRITE;
+
+    /* Render first primitive (256x256 px). */
+    GsSortSprite(psSpr);
+
+    /* Second primitive will be:
+     *  Width = Original Width - 256 px.
+     *  Height = Original Height - 256 px. */
+    psSpr->x += MAX_SIZE_FOR_GSSPRITE;
+    psSpr->w = X_SCREEN_RESOLUTION - MAX_SIZE_FOR_GSSPRITE;
+
+    /* TPage must be increased as we are looking 256 px to
+     * the right inside VRAM. Remember that TPages are 64x64 px. */
+    psSpr->tpage += MAX_SIZE_FOR_GSSPRITE >> GFX_TPAGE_WIDTH_BITSHIFT;
+
+    /* Render second primitive. */
+    GsSortSprite(psSpr);
+
+    /* Restore original TPage, width and X values. */
+    psSpr->tpage = aux_tpage;
+    psSpr->w = aux_w;
+    psSpr->x = aux_x;
 }
 
-bool GfxIsInsideScreenArea(short x, short y, short w, short h)
+/*******************************************************************//**
+*
+* \brief    Initialization of PSX low-level drawing environment.
+*
+*           The drawing environment is a rectangle where primitives
+*           are drawn on.
+*
+* \remarks  Not to be confused with display environment, which is a
+*           rectangle showing VRAM active display area.
+*
+************************************************************************/
+static void GfxInitDrawEnv(void)
 {
-	if( ( (x + w) >= 0) 
-			&&
-		(x < DrawEnv.w)
-			&&
-		( (y + h) >= 0)
-			&&
-		(y < DrawEnv.h)	)
-	{
-		return true;
-	}
-		
-	return false;
+    /* Initialize drawing environment default values. */
+    sDrawEnv.w = X_SCREEN_RESOLUTION;
+    sDrawEnv.h = Y_SCREEN_RESOLUTION;
+
+    /* Initialize drawing environment. */
+    GsSetDrawEnv(&sDrawEnv);
 }
 
-bool GfxIsSpriteInsideScreenArea(GsSprite * spr)
+/*******************************************************************//**
+*
+* \brief    Initialization of PSX low-level display environment.
+*
+*           The display environment is a rectangle describing VRAM
+*           (video RAM) active display area.
+*
+* \remarks  Not to be confused with drawing environment, which is a
+*           rectangle where primitives are drawn on.
+*
+************************************************************************/
+static void GfxInitDispEnv(void)
 {
-	return GfxIsInsideScreenArea(spr->x, spr->y, spr->w, spr->h);
+    /* Initialize display environment. */
+    GsSetDispEnv(&sDispEnv);
 }
 
-void GfxButtonSetFlags(uint8_t flags)
+/*******************************************************************//**
+*
+* \brief    This function sets a pointer to a buffer which holds
+*           low-level primitive data, and performs double buffering
+*           so a secondary buffer can be used to calculate the new scene.
+*
+************************************************************************/
+static void GfxSetPrimList(void)
 {
-	PSXButtons.attribute |= flags;
+    enum
+    {
+        /* Maximum amount of each low-level primitive data buffer. */
+        PRIMITIVE_LIST_SIZE = 0x400
+    };
+
+    /* Buffers that will hold all primitive low-level data. */
+    static uint32_t primList[PRIMITIVE_LIST_SIZE];
+
+    /* Set primitive list. */
+    GsSetList(primList);
 }
 
-void GfxButtonRemoveFlags(uint8_t flags)
+/*******************************************************************//**
+*
+* \brief    Performs double buffering.
+*
+*           Double buffering consists of swapping drawing and display
+*           environments Y position, so that the display environment is
+*           showing current frame, whereas the drawing environment
+*           is calculating the next frame.
+*
+************************************************************************/
+static void GfxSwapBuffers(void)
 {
-	PSXButtons.attribute &= ~flags;
+    enum
+    {
+        DOUBLE_BUFFERING_SWAP_Y = 256
+    };
+
+    if (sDispEnv.y == 0)
+    {
+        sDispEnv.y = DOUBLE_BUFFERING_SWAP_Y;
+        sDrawEnv.y = 0;
+    }
+    else if (sDispEnv.y == DOUBLE_BUFFERING_SWAP_Y)
+    {
+        sDispEnv.y = 0;
+        sDrawEnv.y = DOUBLE_BUFFERING_SWAP_Y;
+    }
+
+    /* Update drawing and display environments
+     * with new calculated Y position. */
+    GsSetDispEnv(&sDispEnv);
+    GsSetDrawEnv(&sDrawEnv);
 }
 
-void GfxDrawButton(short x, short y, unsigned short btn)
+/*******************************************************************//**
+*
+* \brief    This function is executed on VSYNC event.
+*
+*           Game runs at a fixed rate of 50 Hz (if PAL) or 60 Hz (NTSC),
+*           so if CPU has finished calculating the new scene, it must
+*           wait for this interrupt to be triggered so the game runs
+*           at desired frame rate.
+*
+************************************************************************/
+static void ISR_VBlank(void)
 {
-	static bool first_entered = true;
-	static short orig_u;
-	static short orig_v;
-	
-	if(first_entered == true)
-	{
-		first_entered = false;
-		orig_u = PSXButtons.u;
-		orig_v = PSXButtons.v;
-	}
-	
-	PSXButtons.w = BUTTON_SIZE;
-	PSXButtons.h = BUTTON_SIZE;
-	
-	PSXButtons.r = NORMAL_LUMINANCE;
-	PSXButtons.g = NORMAL_LUMINANCE;
-	PSXButtons.b = NORMAL_LUMINANCE;
-	
-	PSXButtons.x = x;
-	PSXButtons.y = y;
-	PSXButtons.mx = PSXButtons.w >> 1;
-	PSXButtons.my = PSXButtons.h >> 1;
-	
-	switch(btn)
-	{
-		case PAD_CROSS:
-			PSXButtons.u = BUTTON_CROSS_U;
-			PSXButtons.v = BUTTON_CROSS_V;
-		break;
-		
-		case PAD_SQUARE:
-			PSXButtons.u = BUTTON_SQUARE_U;
-			PSXButtons.v = BUTTON_SQUARE_V;
-		break;
-		
-		case PAD_TRIANGLE:
-			PSXButtons.u = BUTTON_TRIANGLE_U;
-			PSXButtons.v = BUTTON_TRIANGLE_V;
-		break;
-		
-		case PAD_CIRCLE:
-			PSXButtons.u = BUTTON_CIRCLE_U;
-			PSXButtons.v = BUTTON_CIRCLE_V;
-		break;
-
-		case PAD_RIGHT:
-			PSXButtons.u = BUTTON_DIRECTION_U;
-			PSXButtons.v = BUTTON_DIRECTION_V;
-		break;
-		
-		case PAD_UP:
-			PSXButtons.u = BUTTON_DIRECTION_U;
-			PSXButtons.v = BUTTON_DIRECTION_V;
-			PSXButtons.rotate = 90 << ROTATE_BIT_SHIFT;
-		break;
-		
-		case PAD_DOWN:
-			PSXButtons.u = BUTTON_DIRECTION_U;
-			PSXButtons.v = BUTTON_DIRECTION_V;
-			PSXButtons.rotate = 270 << ROTATE_BIT_SHIFT;
-		break;
-
-		case PAD_LEFT:
-			PSXButtons.u = BUTTON_DIRECTION_U;
-			PSXButtons.v = BUTTON_DIRECTION_V;
-			PSXButtons.attribute |= H_FLIP;
-		break;
-		
-		case PAD_L1:
-			// Fall through
-		case PAD_L2:
-			// Fall through
-		case PAD_R1:
-			// Fall through
-		case PAD_R2:
-			PSXButtons.u = BUTTON_LR_U;
-			PSXButtons.v = BUTTON_LR_V;
-			PSXButtons.w = BUTTON_LR_SIZE;
-		break;
-
-		case PAD_SELECT:
-			// Fall through
-		case PAD_START:
-			// Fall through
-		default:
-			// Set null width and height so that sprite doesn't get sorted
-			PSXButtons.w = 0;
-			PSXButtons.h = 0;
-		break;
-	}
-	
-	PSXButtons.u += orig_u;
-	PSXButtons.v += orig_v;
-	
-	GfxSortSprite(&PSXButtons);
-
-	PSXButtons.attribute &= ~H_FLIP;
-	PSXButtons.rotate = 0;
+    /* Set VSYNC flag. */
+    bSyncFlag = true;
 }
 
-void GfxSaveDisplayData(GsSprite *spr)
+/*******************************************************************//**
+*
+* \brief    Duplicates current displayed screen as into a separate part
+*           of VRAM so it can be used as a sprite.
+*
+************************************************************************/
+void GfxSaveDisplayData(GsSprite *const spr)
 {
-	while(GfxIsGPUBusy() == true);
-	
+    enum
+    {
+        VRAM_W = 1024,
+        VRAM_H = 512,
+        GFX_SECOND_DISPLAY_X = 368,
+        GFX_SECOND_DISPLAY_Y = 256,
+
+        GFX_SECOND_DISPLAY_TPAGE = (GFX_SECOND_DISPLAY_X / GFX_TPAGE_WIDTH) + ((GFX_SECOND_DISPLAY_Y / (VRAM_H / 2)) * VRAM_W / GFX_TPAGE_WIDTH),
+        GFX_SECOND_DISPLAY_U = GFX_SECOND_DISPLAY_X % GFX_TPAGE_WIDTH
+    };
+
+	while (GfxIsGPUBusy());
+
 	MoveImage(	DispEnv.x,
 				DispEnv.y,
 				GFX_SECOND_DISPLAY_X,
 				GFX_SECOND_DISPLAY_Y,
 				X_SCREEN_RESOLUTION,
 				Y_SCREEN_RESOLUTION);
-				
+
 	spr->x = 0;
 	spr->y = 0;
 	spr->tpage = GFX_SECOND_DISPLAY_TPAGE;
 	spr->attribute |= COLORMODE(COLORMODE_16BPP);
 	spr->w = X_SCREEN_RESOLUTION;
 	spr->h = Y_SCREEN_RESOLUTION;
-	spr->u = 0;
+	spr->u = GFX_SECOND_DISPLAY_U;
 	spr->v = 0;
 	spr->r = NORMAL_LUMINANCE;
 	spr->g = NORMAL_LUMINANCE;
 	spr->b = NORMAL_LUMINANCE;
 
-	while(GfxIsGPUBusy() == true);
-}
-
-bool GfxTPageOffsetFromVRAMPosition(GsSprite * spr, short x, short y)
-{
-	if(	(x >= VRAM_W) || (x < 0) || (y >= VRAM_H) || (y < 0) )
-	{
-		return false;
-	}
-	
-	spr->tpage = x / GFX_TPAGE_WIDTH;
-	spr->tpage += (short)(VRAM_W / GFX_TPAGE_WIDTH) * (short)(y / GFX_TPAGE_HEIGHT);
-	
-	spr->u = (x % GFX_TPAGE_WIDTH);
-	
-	if(spr->attribute & COLORMODE(COLORMODE_8BPP))
-	{
-		// On 8bpp images, it looks like U offset needs to be multiplied by 2.
-		spr->u <<= 1;
-	}
-	
-	spr->v = (y % GFX_TPAGE_HEIGHT);
-	
-	//dprintf("Sprite:\n\tTPAGE: %d\n\tU=%d\n\tV=%d\n",spr->tpage,spr->u, spr->v);
-	
-	return false;
+	while (GfxIsGPUBusy());
 }

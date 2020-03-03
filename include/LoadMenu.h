@@ -1,14 +1,11 @@
-#ifndef __LOAD_MENU_HEADER__
-#define __LOAD_MENU_HEADER__
+#ifndef LOAD_MENU_H
+#define LOAD_MENU_H
 
 /* *************************************
  * 	Includes
  * *************************************/
 
-#include "Global_Inc.h"
-#include "Gfx.h"
-#include "System.h"
-#include "Font.h"
+#include <stdint.h>
 
 /* *************************************
  * 	Defines
@@ -20,10 +17,10 @@
 
 void LoadMenuInit(void);
 
-void LoadMenu(	char*	fileList[], 
-				void * dest[],
-				uint8_t szFileList	, uint8_t szDestList);
-				
+void LoadMenu(	const char *const *fileList,
+				void *const *dest,
+				uint8_t szFileList, uint8_t szDestList);
+
 void LoadMenuEnd(void);
 
-#endif //__LOAD_MENU_HEADER__
+#endif /* LOAD_MENU_H */
