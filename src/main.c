@@ -1,5 +1,5 @@
 /* *************************************
- * 	Includes
+ *  Includes
  * *************************************/
 
 #include "Global_Inc.h"
@@ -9,18 +9,18 @@
 #include "EndAnimation.h"
 
 /* *************************************
- * 	Defines
+ *  Defines
  * *************************************/
 
 #define PSX_EXE_HEADER_SIZE 2048
 #define EXE_DATA_PACKET_SIZE 8
 
 /* *************************************
- * 	Local Prototypes
+ *  Local Prototypes
  * *************************************/
 
 /* *************************************
- * 	Local Variables
+ *  Local Variables
  * *************************************/
 
  /* Untitled1 (10/07/2017 18:57:47)
@@ -38,15 +38,14 @@ int main(void)
     uint8_t* inBuffer = SystemGetBufferAddress();
    // int (*exeAddress)(void);
 
-	//System initialization
+    //System initialization
     dprintf("SystemInit()\n");
-	SystemInit();
+    SystemInit();
 
     dprintf("LoadMenuInit()\n");
 
     LoadMenuInit();
 
-    if(1)
     {
         uint32_t initPC_Address;
         uint32_t RAMDest_Address;
@@ -154,9 +153,9 @@ int main(void)
         // PSX-EXE has been successfully loaded into RAM. Run executable!
 
         //dprintf("Entering exe...\n");
-        
+
         exeAddress();
     }
-		
-	return 0;
+
+    return 0;
 }
