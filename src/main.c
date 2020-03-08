@@ -1,5 +1,5 @@
 #include "System.h"
-#include <stdio.h>
+#include "reception.h"
 
 #define PSX_EXE_HEADER_SIZE 2048
 #define EXE_DATA_PACKET_SIZE 8
@@ -8,7 +8,10 @@ int main(void)
 {
     SystemInit();
 
-    for (;;);
+    reception_loop();
+
+    for (;;)
+        ;
 
 #if 0
     {
@@ -122,5 +125,6 @@ int main(void)
         exeAddress();
     }
 #endif
+
     return 0;
 }

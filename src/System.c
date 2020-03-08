@@ -6,6 +6,7 @@
 
 void SystemInit(void)
 {
+	redirect_stdio_to_sio();
 #if 0
 	PSX_InitEx(PSX_INIT_SAVESTATE | PSX_INIT_CD);
 #else

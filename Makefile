@@ -1,6 +1,7 @@
 PSXSDK_DIR = /usr/local/psxsdk
 
 AS = mipsel-unknown-elf-as
+AS_FLAGS = -msoft-float
 CC = mipsel-unknown-elf-gcc
 DEFINE = -DVIDEO_MODE=VMODE_PAL -D__PSXSDK__ -fno-strict-overflow -fsigned-char -msoft-float -mno-gpopt -fno-builtin -g
 LIBS = -lfixmath
