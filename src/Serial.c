@@ -6,38 +6,29 @@
 #include <psxbios.h>
 #include <psx.h>
 #include <stddef.h>
+#include "reception.h"
 
-enum
-{
-    FIFO_SZ = 128
-};
+fifo rx;
 
-typedef volatile struct
-{
-    unsigned char buf[FIFO_SZ];
-    size_t pending, processed;
-    bool full;
-} fifo;
-
-static fifo rx;
-
-void sio_handler_callback(void)
+static void sio_handler_callback(void)
 {
     while (SIOCheckInBuffer())
     {
         const unsigned char in = SIOReadByte();
         size_t aux = rx.pending;
 
-        if (++aux >= (sizeof rx.buf / sizeof *rx.buf))
+        if (++aux >= sizeof rx.buf / sizeof *rx.buf)
             aux = 0;
 
         if (aux != rx.processed)
         {
             rx.buf[aux] = in;
-            rx.pending = rx.processed;
+            rx.pending = aux;
+            reception_ev();
         }
         else
         {
+            printf("fifo full\n");
             rx.full = true;
         }
     }
@@ -78,22 +69,27 @@ void SerialInit(void)
     };
 
     const int not_crit = EnterCriticalSection();
-    void sio_handler(void);
+
+    EnterCriticalSection();
 
     SIOReset();
     SIOStart(BAUD_RATE);
 
-    const int sio_handle = OpenEvent(SIO_CLASS, SPEC_GENERAL_INTERRUPT, TRIGGER_CALLBACK, sio_handler);
-
-    if (sio_handle != 0xFFFFFFFF)
-        EnableEvent(sio_handle);
-
     IMASK |= 1 << INT_SIO;
+
+    void sio_handler(void);
+    const int sio_handle = OpenEvent(SIO_CLASS, SPEC_GENERAL_INTERRUPT, TRIGGER_CALLBACK, sio_handler_callback);
+
+    if (sio_handle != -1)
+        EnableEvent(sio_handle);
 
     SIOEnableRXInterrupt();
 
     if (not_crit)
-    {
         ExitCriticalSection();
-    }
+}
+
+void SerialWrite(const unsigned char byte)
+{
+    SIOSendByte(byte);
 }

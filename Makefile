@@ -6,7 +6,7 @@ CC = mipsel-unknown-elf-gcc
 DEFINE = -DVIDEO_MODE=VMODE_PAL -D__PSXSDK__ -fno-strict-overflow -fsigned-char -msoft-float -mno-gpopt -fno-builtin -g
 LIBS = -lfixmath
 INCLUDE = include $(PSXSDK_DIR)/include
-CC_FLAGS = -Wall -Werror -ffunction-sections -fdata-sections -c -Os -Wfatal-errors -g $(addprefix -I, $(INCLUDE))
+CC_FLAGS = -Wall -ffunction-sections -fdata-sections -c -Os -Wfatal-errors -g $(addprefix -I, $(INCLUDE))
 LD = mipsel-unknown-elf-gcc
 LD_FLAGS = $(LIBS) -Wl,--gc-sections -L$(PSXSDK_DIR)/lib -I/usr/local/psxsdk/include -T /usr/local/psxsdk/mipsel-unknown-elf/lib/ldscripts/playstation.x
 
@@ -32,8 +32,8 @@ BIN_TARGET_PATH = bin
 GNU_SIZE = mipsel-unknown-elf-size
 
 OBJECTS = $(addprefix $(OBJ_DIR)/,	\
-			Font.o Gfx.o Serial.o System.o \
-			Interrupts.o IO.o main.o sio.o \
+			Font.o Gfx.o Serial.o System.o  Interrupts.o \
+			IO.o main.o reception.o \
 			)
 
 CDROM_ROOT = cdimg
